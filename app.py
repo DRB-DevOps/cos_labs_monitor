@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from models import db, Lab, Project, Personnel, Activity, Cost, LabSupportRelation
 from models import ActivityType, ProjectStatus, CostType
@@ -7,7 +7,7 @@ import os
 from sqlalchemy import func, and_, or_
 from decimal import Decimal
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="frontend/build")
 
 # 데이터베이스 설정
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -472,6 +472,14 @@ def get_costs():
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, "index.html")
 
 if __name__ == '__main__':
     with app.app_context():
