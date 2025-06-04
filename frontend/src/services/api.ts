@@ -7,7 +7,7 @@ import { Activity, ActivityInput } from '../types/activity';
 import { LabStat, LabConnection } from '../types/analytics';
 import { Cost, CostInput } from '../types/cost';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = '/api';
 
 export async function fetchDashboardData(): Promise<DashboardData> {
   const res = await axios.get(`${API_BASE}/dashboard`);
