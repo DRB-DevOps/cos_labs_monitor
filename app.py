@@ -6,6 +6,12 @@ from datetime import datetime, date
 import os
 from sqlalchemy import func, and_, or_
 from decimal import Decimal
+import requests
+import sqlite3
+import re
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__, static_folder="frontend/build")
 
@@ -34,6 +40,78 @@ class CustomJSONEncoder:
         raise TypeError(f'Object of type {type(obj)} is not JSON serializable')
 
 app.json_encoder = CustomJSONEncoder
+
+# Claude Sonnet 4 API 설정
+LLM_API_URL = os.environ.get('LLM_API_URL', 'https://api.anthropic.com/v1/messages')
+LLM_API_KEY = os.environ['LLM_API_KEY']
+DB_PATH = './future_labs.db'
+
+# DB 스키마 추출
+def get_db_schema():
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = [row[0] for row in cursor.fetchall()]
+        schema_lines = []
+        for table in tables:
+            cursor.execute(f"PRAGMA table_info({table});")
+            columns = [f"{row[1]} ({row[2]})" for row in cursor.fetchall()]
+            schema_lines.append(f"{table}: " + ", ".join(columns))
+    return schema_lines
+
+# 자연어→SQL 변환
+def get_sql_from_llm(nl_query):
+    schema_info = "[DB 스키마 정보]\n" + "\n".join(get_db_schema())
+    prompt = (
+        f"{schema_info}\n"
+        "위 DB 스키마를 참고해서, 아래 자연어 질문을 SQLite에서 실행 가능한 SQL SELECT 쿼리문(세미콜론 포함)만 반환해줘. "
+        "설명이나 자연어는 절대 포함하지 마. 오직 SQL 쿼리문만 출력해. "
+        f"질문: {nl_query}"
+    )
+    payload = {
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 1024,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+    headers = {
+        "x-api-key": LLM_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+    response = requests.post(LLM_API_URL, json=payload, headers=headers)
+    text = response.json()['content'][0]['text']
+    match = re.search(r'(SELECT[\s\S]+?;)', text, re.IGNORECASE)
+    if match:
+        sql = match.group(1)
+    else:
+        sql = text.strip()
+    return sql
+
+# 쿼리 결과 요약
+def summarize_with_llm(result, nl_query):
+    prompt = (
+        f"사용자 질문: {nl_query}\n"
+        "아래 SQL 쿼리 결과를 참고해서, 사용자의 질문에 대해 친근하고 자연스러운 한국어로 간단히 답변해줘. "
+        "불필요한 설명이나 'SQL 쿼리 결과에 따르면' 같은 문구는 빼고, 마치 사람이 대화하듯 답해줘.\n"
+        f"쿼리 결과: {result}"
+    )
+    payload = {
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 1024,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+    headers = {
+        "x-api-key": LLM_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+    response = requests.post(LLM_API_URL, json=payload, headers=headers)
+    summary = response.json()['content'][0]['text']
+    return summary.strip()
 
 # API 라우트들
 
@@ -473,6 +551,32 @@ def get_costs():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# MCP + Gemini 연동 채팅 API
+@app.route('/api/chat', methods=['POST'])
+def chat_with_db():
+    try:
+        data = request.get_json()
+        user_query = data['query']
+
+        # 1. 자연어 → SQL 변환
+        sql = get_sql_from_llm(user_query)
+
+        # 2. SQL 실행
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql)
+            columns = [desc[0] for desc in cursor.description] if cursor.description else []
+            result = cursor.fetchall()
+            # 결과를 [{col: val, ...}, ...] 형태로 변환
+            result_dicts = [dict(zip(columns, row)) for row in result] if columns else result
+
+        # 3. 결과 요약
+        summary = summarize_with_llm(result_dicts, user_query)
+
+        return jsonify({'answer': summary, 'sql': sql, 'result': result_dicts})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve(path):
@@ -485,3 +589,4 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     app.run(debug=True, host='0.0.0.0', port=5000) 
+

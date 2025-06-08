@@ -14,6 +14,7 @@ import Personnel from './pages/Personnel';
 import Activities from './pages/Activities';
 import Analytics from './pages/Analytics';
 import Costs from './pages/Costs';
+import ChatWidget from './components/ChatWidget';
 
 const { Content } = Layout;
 
@@ -41,6 +42,7 @@ function App() {
           </Layout>
         </Layout>
       </Router>
+      <ChatWidget />
     </ConfigProvider>
   );
 }

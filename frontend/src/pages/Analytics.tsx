@@ -9,11 +9,8 @@ import { Cost } from '../types/cost';
 import { LabConnection } from '../types/analytics';
 import dayjs, { Dayjs } from 'dayjs';
 import CytoscapeNetwork from '../components/CytoscapeNetwork';
-import isoWeek from 'dayjs/plugin/isoWeek';
 
 const { RangePicker } = DatePicker;
-
-dayjs.extend(isoWeek);
 
 const Analytics: React.FC = () => {
   const [labs, setLabs] = useState<Lab[]>([]);
@@ -25,13 +22,13 @@ const Analytics: React.FC = () => {
   const [selectedLabId, setSelectedLabId] = useState<number | undefined>(undefined);
   const [connections, setConnections] = useState<LabConnection[]>([]);
   const [projectId, setProjectId] = useState<number | undefined>(undefined);
-  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>([
-    dayjs().subtract(1, 'month'),
-    dayjs()
-  ]);
   const [drillData, setDrillData] = useState<{dates: string[], hours: number[], costs: number[], participants: number[]}>();
   const [drillLoading, setDrillLoading] = useState(false);
-  const [aggregation, setAggregation] = useState<'day' | 'week' | 'month' | 'year'>('month');
+  const [aggregation, setAggregation] = useState<'day' | 'week' | 'month' | 'year'>('day');
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>([
+    dayjs().subtract(3, 'month'),
+    dayjs()
+  ]);
 
   // aggregation 단위별로 날짜 key를 만드는 함수
   function getDateKey(date: dayjs.Dayjs) {
