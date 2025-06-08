@@ -33,4 +33,9 @@ Thumbs.db
 *.p12
 
 # Logs
-*.log 
+*.log
+
+# Environment variables
+.env
+
+## frontend/build 
